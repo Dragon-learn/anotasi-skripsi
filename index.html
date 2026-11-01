@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alat Anotasi Gambar Skripsi</title>
+<style>
+:root{color-scheme:light dark;--a:#2563eb;--b:#8888}
+*{box-sizing:border-box}
+body{margin:0;font:14px system-ui,sans-serif;background:Canvas;color:CanvasText}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--b)}
+main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:12px;padding:12px;height:calc(100vh - 54px)}
+#img{display:flex;align-items:center;justify-content:center;border:1px solid var(--b);border-radius:8px;overflow:hidden;min-height:0;text-align:center;padding:8px}
+#img img{max-width:100%;max-height:100%;object-fit:contain}
+#form{overflow:auto;padding-right:4px}
+fieldset{border:1px solid var(--b);border-radius:8px;margin:0 0 8px;padding:6px 8px}
+legend{font-weight:600;padding:0 4px}
+.o,.m{display:flex;flex-wrap:wrap;gap:4px}
+button,label.btn{font:inherit;border:1px solid var(--b);border-radius:6px;padding:4px 8px;background:Canvas;color:CanvasText;cursor:pointer}
+.o button.on{background:var(--a);color:#fff;border-color:var(--a)}
+.m button{width:36px;height:36px;padding:0;font-weight:700}
+.m button.on{outline:3px solid var(--a);outline-offset:1px}
+textarea{width:100%;font:inherit;background:Canvas;color:CanvasText;border:1px solid var(--b);border-radius:6px}
+#name{font-weight:600;margin-bottom:8px}
+@media(max-width:800px){main{grid-template-columns:1fr;height:auto}#img{height:55vh}}
+</style>
+</head>
+<body>
+<header>
+  <label class="btn">Pilih gambar<input id="f" type="file" accept="image/*" multiple hidden></label>
+  <label><input id="blind" type="checkbox"> Mode buta (acak, sembunyikan nama, hanya MST)</label>
+  <span id="prog"></span><span style="flex:1"></span>
+  <button id="prev" title="Sebelumnya">&larr;</button><button id="next" title="Berikutnya">&rarr;</button>
+  <button id="exp">Ekspor Excel</button>
+</header>
+<main>
+  <div id="img"><span>Pilih atau seret gambar ke halaman ini. Gambar tetap di komputermu dan tidak diunggah.</span></div>
+  <div id="form"></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const S={
+  Gender:['Perempuan','Laki-laki'],
+  Usia:['Dewasa Muda','Dewasa Tua'],
+  Pakaian_Kategori:[
+    'Batik tradisional (kasual)',
+    'Batik formal (jas/kemeja/dasi)',
+    'Formal modern tanpa batik',
+    'Seragam/pakaian kerja',
+    'Netral/kasual polos'
+  ],
+  Latar_Kategori:[
+    'Pasar tradisional',
+    'Pusat perniagaan/pertokoan',
+    'Perkotaan (luar ruang)',
+    'Kantor/ruang kerja',
+    'Kafe/restoran',
+    'Aula/ruang publik',
+    'Konstruksi/industri',
+    'Laboratorium/fasilitas medis',
+    'Pedesaan',
+    'Pertanian/perkebunan/perairan',
+    'Rumah tinggal',
+    'Bangunan tradisional'
+  ],
+  Penanda_Keagamaan:['Hijab','Peci','Peci + Sarung','Sarung','Tidak ada']
+};
+// Warna swatch MST: cek ulang terhadap sumber resmi (skintone.google).
+const SW=['f6ede4','f3e7db','f7ead0','eadaba','d7bd96','a07e56','825c43','604134','3a312a','292420'];
+const LS='anotasi_v1';
+let items=[],order=[],pos=0,ann={};
+try{ann=JSON.parse(localStorage.getItem(LS)||'{}')}catch(e){}
+const $=id=>document.getElementById(id);
+const save=()=>{try{localStorage.setItem(LS,JSON.stringify(ann))}catch(e){}};
+const bl=()=>$('blind').checked;
+const mk=()=>bl()?'MST_buta':'MST';
+const cur=()=>items[order[pos]];
+const rec=it=>ann[it.key]||(ann[it.key]={});
+
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+function load(files){
+  items=[...files].filter(f=>f.type.startsWith('image/')).sort((a,b)=>a.name.localeCompare(b.name))
+    .map(f=>({f,key:f.name+'|'+f.size,url:URL.createObjectURL(f)}));
+  pos=0;build();render();
+}
+function build(){
+  order=items.map((_,i)=>i);
+  if(bl()){const r=rng(2026);for(let i=order.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[order[i],order[j]]=[order[j],order[i]]}}
+  const rank=new Map(order.map((v,i)=>[v,i]));
+  items.forEach((it,i)=>it.kode='K'+String(rank.get(i)+1).padStart(3,'0'));
+  pos=Math.min(pos,Math.max(order.length-1,0));
+}
+function isDone(it){
+  const x=ann[it.key]||{};
+  return bl()?!!x.MST_buta:!!(x.MST&&x.Gender&&x.Usia&&x.Pakaian_Kategori&&x.Latar_Kategori&&x.Penanda_Keagamaan);
+}
+function grp(title,cls,inner){return '<fieldset><legend>'+title+'</legend><div class="'+cls+'">'+inner+'</div></fieldset>'}
+function render(){
+  const it=cur();
+  if(!it){$('img').innerHTML='<span>Pilih atau seret gambar ke halaman ini. Gambar tetap di komputermu dan tidak diunggah.</span>';$('form').innerHTML='';$('prog').textContent='';return}
+  const x=ann[it.key]||{},k=mk();
+  $('img').innerHTML='<img alt="">';$('img').firstChild.src=it.url;
+  let h='<div id="name"></div>';
+  h+=grp(bl()?'MST buta (tombol 1-9, 0 untuk 10)':'MST (tombol 1-9, 0 untuk 10)','m',
+    SW.map((c,i)=>'<button data-k="'+k+'" data-v="'+(i+1)+'" class="'+(x[k]==i+1?'on':'')+'" style="background:#'+c+';color:'+(i<5?'#222':'#fff')+'">'+(i+1)+'</button>').join(''));
+  if(!bl()){
+    for(const f in S)h+=grp(f.replace(/_/g,' '),'o',S[f].map(v=>'<button data-k="'+f+'" data-v="'+v+'" class="'+(x[f]===v?'on':'')+'">'+v+'</button>').join(''));
+    h+='<fieldset><legend>Lainnya</legend><label><input type="checkbox" id="mo"> Gambar berisi beberapa orang</label><textarea id="cat" rows="2" placeholder="Catatan"></textarea></fieldset>';
+  }
+  $('form').innerHTML=h;
+  $('name').textContent=(bl()?it.kode:it.f.name)+'  ('+(pos+1)+'/'+order.length+')';
+  if(!bl()){
+    $('mo').checked=x.Multi_Orang==='Ya';$('cat').value=x.Catatan||'';
+    $('mo').onchange=e=>{rec(it).Multi_Orang=e.target.checked?'Ya':'Tidak';save()};
+    $('cat').oninput=e=>{rec(it).Catatan=e.target.value;save()};
+  }
+  $('prog').textContent='Selesai: '+items.filter(isDone).length+' / '+items.length;
+}
+function setVal(k,v){const it=cur();if(!it)return;const r=rec(it);r[k]=r[k]==v?'':v;save();render()}
+function go(d){if(!items.length)return;pos=(pos+d+order.length)%order.length;render()}
+
+$('f').onchange=e=>load(e.target.files);
+$('blind').onchange=()=>{build();render()};
+$('prev').onclick=()=>go(-1);$('next').onclick=()=>go(1);
+$('form').onclick=e=>{const b=e.target.closest('button[data-k]');if(b)setVal(b.dataset.k,b.dataset.k.startsWith('MST')?+b.dataset.v:b.dataset.v)};
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='TEXTAREA'||e.ctrlKey||e.metaKey)return;
+  if(e.key==='ArrowRight')go(1);else if(e.key==='ArrowLeft')go(-1);
+  else if(/^[0-9]$/.test(e.key))setVal(mk(),e.key==='0'?10:+e.key);
+});
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();load(e.dataTransfer.files)});
+
+function rows(){
+  return items.map(it=>{
+    const x=ann[it.key]||{},pk=x.Pakaian_Kategori||'',ag=x.Penanda_Keagamaan||'';
+    return {ID_Gambar:it.f.name.replace(/\.[^.]+$/,''),Kode:it.kode,Gender:x.Gender||'',Usia:x.Usia||'',MST:x.MST||'',MST_buta:x.MST_buta||'',
+      Pakaian_Kategori:pk,Batik:pk?(pk.startsWith('Batik')?'Ya':'Tidak'):'',Latar_Kategori:x.Latar_Kategori||'',
+      Penanda_Keagamaan:ag,Penanda_Islam:ag?(ag==='Tidak ada'?'Tidak':'Ya'):'',Multi_Orang:x.Multi_Orang||'Tidak',Catatan:x.Catatan||''};
+  }).sort((a,b)=>a.ID_Gambar.localeCompare(b.ID_Gambar));
+}
+$('exp').onclick=()=>{
+  if(!items.length)return;
+  const r=rows();
+  if(window.XLSX){
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(r),'Anotasi');XLSX.writeFile(wb,'anotasi.xlsx');
+  }else{
+    const cols=Object.keys(r[0]),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+    const csv='sep=;\r\n'+[cols.join(';')].concat(r.map(o=>cols.map(c=>q(o[c])).join(';'))).join('\r\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download='anotasi.csv';a.click();
+  }
+};
+</script>
+</body>
+</html>
