@@ -10,14 +10,33 @@
 body{margin:0;font:14px system-ui,sans-serif;background:Canvas;color:CanvasText}
 header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--b)}
 .selector-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;background:rgba(0,0,0,0.03);border-bottom:1px solid var(--b)}
-select{font:inherit;padding:6px 10px;border-radius:6px;border:1px solid var(--b);background:Canvas;color:CanvasText;transition:all 0.2s}
-/* Efek highlight langsung aktif secara real-time */
-select.highlighted {
+
+/* Kotak pembungkus select agar highlight real-time di HP bekerja sempurna */
+.select-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--b);
+  border-radius: 6px;
+  background: Canvas;
+  transition: all 0.2s ease;
+}
+.select-box.active {
   border-color: var(--a);
   background-color: rgba(37, 99, 235, 0.12);
-  font-weight: 600;
-  color: var(--a);
+  box-shadow: 0 0 0 1px var(--a);
 }
+.select-box select {
+  font: inherit;
+  border: none;
+  background: transparent;
+  color: CanvasText;
+  outline: none;
+  cursor: pointer;
+  padding: 2px;
+}
+
 main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:12px;padding:12px;height:calc(100vh - 105px)}
 #img{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid var(--b);border-radius:8px;overflow:hidden;min-height:0;text-align:center;padding:8px}
 #img img{max-width:100%;max-height:78%;object-fit:contain}
@@ -45,9 +64,9 @@ textarea{width:100%;font:inherit;background:Canvas;color:CanvasText;border:1px s
 
 <div class="selector-bar">
   <span><b>Folder:</b></span>
-  <select id="sel-model"><option value="">-- Model --</option></select>
-  <select id="sel-kat" disabled><option value="">-- Kategori --</option></select>
-  <select id="sel-prompt" disabled><option value="">-- Prompt --</option></select>
+  <div class="select-box" id="box-model"><select id="sel-model"><option value="">-- Model --</option></select></div>
+  <div class="select-box" id="box-kat"><select id="sel-kat" disabled><option value="">-- Kategori --</option></select></div>
+  <div class="select-box" id="box-prompt"><select id="sel-prompt" disabled><option value="">-- Prompt --</option></select></div>
   <button id="btn-load" style="background:var(--a);color:#fff;border-color:var(--a);" disabled>Muat Gambar</button>
 </div>
 
@@ -100,24 +119,14 @@ const rec=it=>ann[it.key]||(ann[it.key]={});
 
 function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
-// Fungsi pembaruan highlight real-time yang langsung merespons perubahan
-function updateHighlight(el) {
-  if (el.value && el.value !== '') {
-    el.classList.add('highlighted');
+function updateBox(selId, boxId) {
+  const sel = $(selId), box = $(boxId);
+  if (sel.value && sel.value !== '') {
+    box.classList.add('active');
   } else {
-    el.classList.remove('highlighted');
+    box.classList.remove('active');
   }
 }
-
-// Pasang pemantau real-time ke semua elemen select secara otomatis
-document.querySelectorAll('select').forEach(sel => {
-  sel.addEventListener('change', () => {
-    updateHighlight(sel);
-  });
-  sel.addEventListener('input', () => {
-    updateHighlight(sel);
-  });
-});
 
 async function initRepoTree() {
   try {
@@ -134,7 +143,7 @@ async function initRepoTree() {
     const models = [...new Set(rawData.map(n => n.path.split('/')[1]))].filter(Boolean);
     const selModel = $('sel-model');
     selModel.innerHTML = '<option value="">-- Model --</option>' + models.map(m=>`<option value="${m}">${m}</option>`).join('');
-    updateHighlight(selModel);
+    updateBox('sel-model', 'box-model');
   } catch(e) {
     console.error(e);
     alert('Gagal menghubungkan ke GitHub API.');
@@ -143,13 +152,13 @@ async function initRepoTree() {
 
 $('sel-model').onchange = e => {
   const m = e.target.value;
-  updateHighlight(e.target);
+  updateBox('sel-model', 'box-model');
   const selKat = $('sel-kat'), selPrompt = $('sel-prompt');
   
   selKat.innerHTML = '<option value="">-- Kategori --</option>';
   selPrompt.innerHTML = '<option value="">-- Prompt --</option>';
-  updateHighlight(selKat);
-  updateHighlight(selPrompt);
+  updateBox('sel-kat', 'box-kat');
+  updateBox('sel-prompt', 'box-prompt');
 
   selKat.disabled = !m; selPrompt.disabled = true; $('btn-load').disabled = true;
   if (!m) return;
@@ -160,11 +169,11 @@ $('sel-model').onchange = e => {
 
 $('sel-kat').onchange = e => {
   const m = $('sel-model').value, kat = e.target.value;
-  updateHighlight(e.target);
+  updateBox('sel-kat', 'box-kat');
   const selPrompt = $('sel-prompt');
   
   selPrompt.innerHTML = '<option value="">-- Prompt --</option>';
-  updateHighlight(selPrompt);
+  updateBox('sel-prompt', 'box-prompt');
 
   selPrompt.disabled = !kat; $('btn-load').disabled = true;
   if (!kat) return;
@@ -174,7 +183,7 @@ $('sel-kat').onchange = e => {
 };
 
 $('sel-prompt').onchange = e => {
-  updateHighlight(e.target);
+  updateBox('sel-prompt', 'box-prompt');
   $('btn-load').disabled = !e.target.value;
 };
 
